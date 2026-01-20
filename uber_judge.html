@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>Uber 即判定</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <style>
+    body {
+      font-family: -apple-system, system-ui, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #111;
+      color: #fff;
+    }
+    h1 {
+      font-size: 22px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .mode {
+      text-align: center;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .mode span {
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: bold;
+    }
+    .mode-day {
+      background: #14532d;
+      color: #bbf7d0;
+    }
+    .mode-night {
+      background: #1d4ed8;
+      color: #bfdbfe;
+    }
+    .section {
+      margin-bottom: 16px;
+    }
+    .label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 4px;
+    }
+    .label-row span {
+      font-size: 14px;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 14px;
+      border: 1px solid #555;
+      background: #222;
+      cursor: pointer;
+      user-select: none;
+    }
+    .chip.active {
+      background: #f97316;
+      border-color: #fed7aa;
+      color: #111;
+      font-weight: 600;
+    }
+    input[type="number"] {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #18181b;
+      color: #fff;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    .judge-btn {
+      width: 100%;
+      padding: 12px;
+      border-radius: 999px;
+      border: none;
+      font-size: 18px;
+      font-weight: bold;
+      margin: 4px 0 12px;
+      background: #22c55e;
+      color: #052e16;
+      cursor: pointer;
+    }
+    .judge-btn:active {
+      transform: scale(0.98);
+    }
+    .result-card {
+      padding: 16px;
+      border-radius: 12px;
+      background: #18181b;
+      text-align: center;
+      min-height: 140px;
+    }
+    .mark {
+      font-size: 64px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .mark-good { color: #22c55e; }
+    .mark-mid { color: #facc15; }
+    .mark-bad { color: #ef4444; }
+    .result-line {
+      font-size: 16px;
+      margin: 2px 0;
+    }
+    .reason {
+      margin-top: 8px;
+      font-size: 14px;
+      color: #e5e7eb;
+    }
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #9ca3af;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Uber 即判定</h1>
+  <div class="mode" id="modeDisplay"></div>
+
+  <div class="section">
+    <div class="label-row">
+      <span>距離 (km)</span>
+      <span style="font-size:12px;color:#9ca3af;">タップ or 直接入力</span>
+    </div>
+    <div class="chips" id="distanceChips"></div>
+    <input type="number" id="distanceInput" step="0.1" inputmode="decimal" placeholder="例: 2.1">
+  </div>
+
+  <div class="section">
+    <div class="label-row">
+      <span>報酬 (円)</span>
+    </div>
+    <div class="chips" id="feeChips"></div>
+    <input type="number" id="feeInput" step="10" inputmode="numeric" placeholder="例: 560">
+  </div>
+
+  <div class="section">
+    <div class="label-row">
+      <span>時間 (分)</span>
+    </div>
+    <div class="chips" id="timeChips"></div>
+    <input type="number" id="timeInput" step="1" inputmode="numeric" placeholder="例: 20">
+  </div>
+
+  <button class="judge-btn" id="judgeBtn">判定</button>
+
+  <div class="result-card" id="resultCard">
+    <div class="result-line">距離・報酬・時間を入力して「判定」を押してください。</div>
+  </div>
+
+  <div class="hint">
+    よく使う距離・金額・時間は上のボタンだけで入力できます。イレギュラーな値は直接入力を使ってください。
+  </div>
+
+
+  <script>
+    const config = {
+      day:   { hourlyGood: 1400, hourlyOkay: 1100, maxKm: 2.2, minYenPerKm: 180 },
+      night: { hourlyGood: 1800, hourlyOkay: 1500, maxKm: 3.0, minYenPerKm: 160 }
+    };
+
+    function currentMode() {
+      const h = new Date().getHours();
+      return (h >= 17 || h < 4) ? "night" : "day";
+    }
+
+    function updateModeDisplay() {
+      const mode = currentMode();
+      const el = document.getElementById("modeDisplay");
+      const span = document.createElement("span");
+      span.textContent = mode === "day" ? "現在モード：昼" : "現在モード：夜";
+      span.className = mode === "day" ? "mode-day" : "mode-night";
+      el.innerHTML = "";
+      el.appendChild(span);
+    }
+
+    function createChips(containerId, values, inputId) {
+      const container = document.getElementById(containerId);
+      const input = document.getElementById(inputId);
+
+      values.forEach(v => {
+        const chip = document.createElement("div");
+        chip.className = "chip";
+        chip.textContent = v;
+        chip.addEventListener("click", () => {
+          input.value = v;
+          Array.from(container.children).forEach(c => c.classList.remove("active"));
+          chip.classList.add("active");
+        });
+        container.appendChild(chip);
+      });
+
+      input.addEventListener("input", () => {
+        Array.from(container.children).forEach(c => c.classList.remove("active"));
+      });
+    }
+
+    function judge(distanceKm, feeYen, etaMin) {
+      const mode = currentMode();
+      const cfg = config[mode];
+      const hourly = feeYen / (etaMin / 60);
+      const yenPerKm = feeYen / distanceKm;
+
+      let mark = "×";
+      if (hourly >= cfg.hourlyGood && distanceKm <= cfg.maxKm && yenPerKm >= cfg.minYenPerKm) {
+        mark = "◎";
+      } else if (hourly >= cfg.hourlyOkay) {
+        mark = "△";
+      }
+
+      let reason = "";
+      if (mark === "△") {
+        if (distanceKm > cfg.maxKm) reason = "距離";
+        else if (yenPerKm < cfg.minYenPerKm) reason = "円/km";
+      }
+
+      return { mode, hourly, yenPerKm, mark, reason };
+    }
+
+    function showResult(result) {
+      const card = document.getElementById("resultCard");
+      card.innerHTML = "";
+
+      const markDiv = document.createElement("div");
+      markDiv.classList.add("mark");
+      if (result.mark === "◎") markDiv.classList.add("mark-good");
+      else if (result.mark === "△") markDiv.classList.add("mark-mid");
+      else markDiv.classList.add("mark-bad");
+      markDiv.textContent = result.mark;
+      card.appendChild(markDiv);
+
+      const hourlyDiv = document.createElement("div");
+      hourlyDiv.className = "result-line";
+      hourlyDiv.textContent = `時給：${Math.round(result.hourly)} 円/h`;
+      card.appendChild(hourlyDiv);
+
+      const ypkDiv = document.createElement("div");
+      ypkDiv.className = "result-line";
+      ypkDiv.textContent = `円/km：${Math.round(result.yenPerKm)} 円`;
+      card.appendChild(ypkDiv);
+
+      if (result.reason) {
+        const reasonDiv = document.createElement("div");
+        reasonDiv.className = "reason";
+        reasonDiv.textContent = `△の理由：${result.reason}`;
+        card.appendChild(reasonDiv);
+      }
+    }
+
+
+    document.addEventListener("DOMContentLoaded", () => {
+      updateModeDisplay();
+      setInterval(updateModeDisplay, 60000);
+
+      createChips("distanceChips", ["1.0","1.5","2.0","2.5","3.0"], "distanceInput");
+      createChips("feeChips",      ["300","400","500","600","700","800"], "feeInput");
+      createChips("timeChips",     ["10","15","20","25","30"], "timeInput");
+
+      document.getElementById("judgeBtn").addEventListener("click", () => {
+        const d = parseFloat(document.getElementById("distanceInput").value);
+        const f = parseInt(document.getElementById("feeInput").value, 10);
+        const t = parseInt(document.getElementById("timeInput").value, 10);
+
+        if (!d || !f || !t) {
+          alert("距離・報酬・時間をすべて入力してください。");
+          return;
+        }
+
+        const result = judge(d, f, t);
+        showResult(result);
+      });
+    });
+  </script>
+</body>
+</html>
